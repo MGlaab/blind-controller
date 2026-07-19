@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Blind Controller Sync</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 20px; background: #f0f0f0; }
+        .card { background: white; padding: 20px; border-radius: 10px; max-width: 400px; margin: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        button { background: #007bff; color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 5px; cursor: pointer; margin: 10px 0; }
+        button:disabled { background: #ccc; }
+        input { font-size: 16px; padding: 8px; margin: 10px; width: 80%; }
+        .status { color: #666; font-style: italic; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>Blind Configurator</h2>
+    <div id="status" class="status">Disconnected</div>
+    <button id="connectBtn" onclick="connectBLE()">Connect to Blind</button>
+    
+    <hr>
+    
+    <h3>Current Settings</h3>
+    <p id="currentTimes">Click connect to read data...</p>
+    
+    <hr>
+    
+    <h3>Update Times</h3>
+    <label>Open Time: <input type="time" id="openTime" value="07:45"></label><br>
+    <label>Close Time: <input type="time" id="closeTime" value="21:24"></label><br>
+    <button id="sendBtn" onclick="sendData()" disabled>Upload to Blind</button>
+</div>
+
+<script>
+// Standard UUIDs for our custom Blind Timer service
+const SERVICE_UUID = '19b10000-e8f2-537e-4f6c-d104768a1214';
+const CHARACTERISTIC_UUID = '19b10001-e8f2-537e-4f6c-d104768a1214';
+
+let blindCharacteristic = null;
+let bleDevice = null;
+
+async function connectBLE() {
+    try {
+        document.getElementById('status').innerText = "Searching...";
+        // Filter for our specific device service
+        bleDevice = await navigator.bluetooth.requestDevice({
+            filters: [{ services: [SERVICE_UUID] }]
+        });
+
+        const server = await bleDevice.gatt.connect();
+        const service = await server.getPrimaryService(SERVICE_UUID);
+        blindCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+        
+        document.getElementById('status').innerText = "Connected to " + bleDevice.name;
+        document.getElementById('sendBtn').disabled = false;
+        document.getElementById('connectBtn').disabled = true;
+
+        // Read the current times stored on the blind right now
+        let value = await blindCharacteristic.readValue();
+        let decoder = new TextDecoder('utf-8');
+        document.getElementById('currentTimes').innerText = decoder.decode(value);
+
+    } catch (error) {
+        document.getElementById('status').innerText = "Connection Failed";
+        console.log(error);
+    }
+}
+
+async function sendData() {
+    if (!blindCharacteristic) return;
+    
+    let openVal = document.getElementById('openTime').value;   // format: "HH:MM"
+    let closeVal = document.getElementById('closeTime').value; // format: "HH:MM"
+    
+    // Package it up into a compact string payload: "OP:HHMM|CL:HHMM"
+    let payload = `OP:${openVal.replace(':','')}|CL:${closeVal.replace(':','')}`;
+    
+    let encoder = new TextEncoder();
+    await blindCharacteristic.writeValue(encoder.encode(payload));
+    
+    document.getElementById('currentTimes').innerText = `Updated to: ${payload}`;
+    alert("Times uploaded successfully!");
+}
+</script>
+</body>
+</html>
