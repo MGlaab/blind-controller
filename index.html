@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ESP32-C3 BLE Control</title>
+  <title>ESP32-C3 Schedule Manager</title>
   <style>
     :root {
       --bg: #0f172a;
@@ -12,7 +12,7 @@
       --subtext: #94a3b8;
       --accent: #3b82f6;
       --success: #22c55e;
-      --danger: #ef4444;
+      --border: #334155;
     }
 
     body {
@@ -32,117 +32,187 @@
       background: var(--card-bg);
       padding: 24px;
       border-radius: 16px;
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
       width: 100%;
-      max-width: 360px;
-      text-align: center;
+      max-width: 400px;
     }
 
-    h2 {
-      margin-top: 0;
-      margin-bottom: 8px;
-    }
+    h2 { margin: 0 0 4px 0; font-size: 1.4rem; text-align: center; }
+    p.subtitle { text-align: center; color: var(--subtext); margin: 0 0 20px 0; font-size: 0.85rem; }
 
-    .status {
-      font-size: 0.9rem;
-      color: var(--subtext);
-      margin-bottom: 24px;
+    .status-bar {
       display: flex;
       align-items: center;
-      justify-content: center;
-      gap: 8px;
+      justify-content: space-between;
+      background: rgba(0,0,0,0.2);
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 0.9rem;
     }
 
     .indicator {
       width: 10px;
       height: 10px;
       border-radius: 50%;
-      background-color: var(--danger);
+      background: #ef4444;
+      display: inline-block;
+      margin-right: 6px;
+    }
+    .indicator.connected { background: var(--success); }
+
+    .display-panel {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
     }
 
-    .indicator.connected {
-      background-color: var(--success);
+    .time-box {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .time-box label { display: block; font-size: 0.75rem; color: var(--subtext); text-transform: uppercase; margin-bottom: 4px; }
+    .time-box .val { font-size: 1.15rem; font-weight: 700; color: var(--accent); }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.85rem;
+      margin-bottom: 6px;
+      color: var(--subtext);
+    }
+
+    .time-input-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    input[type="time"] {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 1rem;
+      outline: none;
     }
 
     .btn {
       width: 100%;
-      padding: 14px;
+      padding: 12px;
       border: none;
       border-radius: 8px;
-      font-size: 1rem;
+      font-size: 0.95rem;
       font-weight: 600;
       cursor: pointer;
-      margin-bottom: 12px;
-      transition: opacity 0.2s, transform 0.1s;
+      transition: opacity 0.2s;
     }
+    .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .btn-connect { background: var(--accent); color: white; }
+    .btn-save { background: var(--success); color: white; margin-top: 10px; }
 
-    .btn:active {
-      transform: scale(0.98);
-    }
-
-    .btn:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-
-    .btn-connect { background-color: var(--accent); color: white; }
-    .btn-high { background-color: var(--success); color: white; }
-    .btn-low { background-color: var(--danger); color: white; }
-
-    .control-group {
-      display: flex;
-      gap: 12px;
-    }
-
-    .control-group .btn {
-      flex: 1;
-    }
-
-    .log {
+    /* Toast Notification */
+    .toast {
+      display: none;
+      background: #14532d;
+      border: 1px solid var(--success);
+      color: #dcfce7;
+      padding: 12px;
+      border-radius: 8px;
       margin-top: 16px;
-      font-size: 0.8rem;
-      color: var(--subtext);
-      text-align: left;
-      background: rgba(0, 0, 0, 0.2);
-      padding: 8px;
-      border-radius: 6px;
-      max-height: 80px;
-      overflow-y: auto;
-      font-family: monospace;
+      font-size: 0.85rem;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
     }
   </style>
 </head>
 <body>
 
   <div class="card">
-    <h2>ESP32-C3 Control</h2>
-    <div class="status">
-      <span id="dot" class="indicator"></span>
-      <span id="status-text">Disconnected</span>
+    <h2>Schedule Control</h2>
+    <p class="subtitle">ESP32-C3 Memory Controller</p>
+
+    <div class="status-bar">
+      <div>
+        <span id="dot" class="indicator"></span>
+        <span id="status-text">Disconnected</span>
+      </div>
+      <button id="connect-btn" class="btn btn-connect" style="width: auto; padding: 6px 12px;" onclick="toggleConnect()">Connect</button>
     </div>
 
-    <button id="connect-btn" class="btn btn-connect" onclick="toggleConnect()">Connect BLE</button>
-
-    <div class="control-group">
-      <button id="high-btn" class="btn btn-high" onclick="sendState('1')" disabled>Set HIGH</button>
-      <button id="low-btn" class="btn btn-low" onclick="sendState('0')" disabled>Set LOW</button>
+    <!-- Live Stored Memory Readings -->
+    <div class="display-panel">
+      <div class="time-box">
+        <label>Stored Open</label>
+        <div id="disp-open" class="val">--:-- --</div>
+      </div>
+      <div class="time-box">
+        <label>Stored Close</label>
+        <div id="disp-close" class="val">--:-- --</div>
+      </div>
     </div>
 
-    <div id="log" class="log">> Ready to connect...</div>
+    <!-- Update Form -->
+    <div class="form-group">
+      <label for="input-open">New Open Time (12-Hour)</label>
+      <input type="time" id="input-open" disabled>
+    </div>
+
+    <div class="form-group">
+      <label for="input-close">New Close Time (12-Hour)</label>
+      <input type="time" id="input-close" disabled>
+    </div>
+
+    <button id="save-btn" class="btn btn-save" onclick="saveTimes()" disabled>Save New Schedule</button>
+
+    <!-- Confirmation Toast -->
+    <div id="toast" class="toast"></div>
   </div>
 
   <script>
-    // These must match the UUIDs from your ESP32-C3 Arduino code
-    const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
-    const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+    const SERVICE_UUID        = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+    const CHAR_STATUS_UUID    = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+    const CHAR_SET_OPEN_UUID  = "c3a110a1-7e88-412f-93d4-b333c1f19811";
+    const CHAR_SET_CLOSE_UUID = "d4b221b2-8f99-4230-a4e5-c444d2f20922";
 
     let bleDevice = null;
-    let bleCharacteristic = null;
+    let charStatus = null, charOpen = null, charClose = null;
+    let currentOpenStr = "", currentCloseStr = "";
 
-    function log(msg) {
-      const logDiv = document.getElementById("log");
-      logDiv.innerHTML += `<br>> ${msg}`;
-      logDiv.scrollTop = logDiv.scrollHeight;
+    // Convert 24-hour time "13:30" to 12-hour "01:30 PM"
+    function format12Hour(time24) {
+      if(!time24) return "";
+      let [h, m] = time24.split(":");
+      h = parseInt(h);
+      const ampm = h >= 12 ? "PM" : "AM";
+      h = h % 12 || 12;
+      return `${String(h).padStart(2, '0')}:${m} ${ampm}`;
+    }
+
+    // Convert 12-hour "01:30 PM" to 24-hour "13:30" for input controls
+    function parse12To24(time12) {
+      if(!time12 || time12 === "--:-- --") return "";
+      const match = time12.match(/^(\d{2}):(\d{2})\s(AM|PM)$/);
+      if(!match) return "";
+      let h = parseInt(match[1]);
+      const m = match[2];
+      const ampm = match[3];
+      if (ampm === "PM" && h < 12) h += 12;
+      if (ampm === "AM" && h === 12) h = 0;
+      return `${String(h).padStart(2, '0')}:${m}`;
     }
 
     async function toggleConnect() {
@@ -155,56 +225,110 @@
 
     async function connectBLE() {
       try {
-        log("Requesting BLE Device...");
         bleDevice = await navigator.bluetooth.requestDevice({
-          filters: [{ name: "ESP32C3_Control" }],
+          filters: [{ name: "ESP32C3_Time_Control" }],
           optionalServices: [SERVICE_UUID]
         });
 
         bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
-
-        log("Connecting to GATT Server...");
         const server = await bleDevice.gatt.connect();
-
-        log("Getting BLE Service...");
         const service = await server.getPrimaryService(SERVICE_UUID);
 
-        log("Getting Characteristic...");
-        bleCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+        charStatus = await service.getCharacteristic(CHAR_STATUS_UUID);
+        charOpen   = await service.getCharacteristic(CHAR_SET_OPEN_UUID);
+        charClose  = await service.getCharacteristic(CHAR_SET_CLOSE_UUID);
+
+        // Listen for data updates pushed from ESP32 memory
+        await charStatus.startNotifications();
+        charStatus.addEventListener('characteristicvaluechanged', handleStatusUpdate);
+
+        // Fetch initial reading
+        const value = await charStatus.readValue();
+        handleStatusUpdate({ target: { value } });
 
         updateUI(true);
-        log("Connected successfully!");
-
       } catch (error) {
-        log(`Error: ${error.message || error}`);
-        updateUI(false);
+        console.error("BLE Connect Error:", error);
       }
     }
 
-    async function sendState(value) {
-      if (!bleCharacteristic) return;
-
+    function handleStatusUpdate(event) {
+      const decoder = new TextDecoder('utf-8');
+      const jsonStr = decoder.decode(event.target.value);
       try {
-        // Send as UTF-8 string bytes
-        const encoder = new TextEncoder();
-        await bleCharacteristic.writeValue(encoder.encode(value));
-        log(`Sent: ${value === '1' ? 'HIGH (1)' : 'LOW (0)'}`);
-      } catch (error) {
-        log(`Write Error: ${error}`);
+        const data = JSON.parse(jsonStr);
+        currentOpenStr = data.open;
+        currentCloseStr = data.close;
+
+        document.getElementById("disp-open").innerText = currentOpenStr;
+        document.getElementById("disp-close").innerText = currentCloseStr;
+
+        // Auto-fill input fields if empty
+        if(!document.getElementById("input-open").value) {
+          document.getElementById("input-open").value = parse12To24(currentOpenStr);
+        }
+        if(!document.getElementById("input-close").value) {
+          document.getElementById("input-close").value = parse12To24(currentCloseStr);
+        }
+      } catch(e) {
+        console.error("Error parsing status payload", e);
       }
+    }
+
+    async function saveTimes() {
+      const rawOpen = document.getElementById("input-open").value;
+      const rawClose = document.getElementById("input-close").value;
+
+      if (!rawOpen || !rawClose) {
+        alert("Please select both open and close times.");
+        return;
+      }
+
+      const newOpenStr = format12Hour(rawOpen);
+      const newCloseStr = format12Hour(rawClose);
+
+      const oldOpen = currentOpenStr;
+      const oldClose = currentCloseStr;
+
+      const encoder = new TextEncoder();
+
+      // Write Open Time
+      if (newOpenStr !== oldOpen) {
+        await charOpen.writeValue(encoder.encode(newOpenStr));
+      }
+
+      // Write Close Time
+      if (newCloseStr !== oldClose) {
+        await charClose.writeValue(encoder.encode(newCloseStr));
+      }
+
+      // Display Confirmation Notification
+      showToast(`
+        <strong>✓ Memory Updated Successfully!</strong><br>
+        Open: <s>${oldOpen}</s> ➔ <b>${newOpenStr}</b><br>
+        Close: <s>${oldClose}</s> ➔ <b>${newCloseStr}</b>
+      `);
+    }
+
+    function showToast(htmlMsg) {
+      const toast = document.getElementById("toast");
+      toast.innerHTML = htmlMsg;
+      toast.style.display = "block";
+      setTimeout(() => { toast.style.display = "none"; }, 6000);
     }
 
     function onDisconnected() {
-      log("Device disconnected.");
       updateUI(false);
     }
 
     function updateUI(isConnected) {
       document.getElementById("dot").className = isConnected ? "indicator connected" : "indicator";
       document.getElementById("status-text").innerText = isConnected ? "Connected" : "Disconnected";
-      document.getElementById("connect-btn").innerText = isConnected ? "Disconnect" : "Connect BLE";
-      document.getElementById("high-btn").disabled = !isConnected;
-      document.getElementById("low-btn").disabled = !isConnected;
+      document.getElementById("connect-btn").innerText = isConnected ? "Disconnect" : "Connect";
+      
+      document.getElementById("input-open").disabled = !isConnected;
+      document.getElementById("input-close").disabled = !isConnected;
+      document.getElementById("save-btn").disabled = !isConnected;
     }
   </script>
 </body>
