@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Step-by-Step Linear Equation Solver</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #f5f5f7;
+      color: #333;
+      display: flex;
+      justify-content: center;
+      padding-top: 50px;
+    }
+    .card {
+      background: #ffffff;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 500px;
+    }
+    h2 {
+      margin-top: 0;
+      color: #1d1d1f;
+    }
+    .input-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    input[type="text"] {
+      flex: 1;
+      padding: 12px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      outline: none;
+    }
+    input[type="text"]:focus {
+      border-color: #0071e3;
+    }
+    button {
+      padding: 12px 20px;
+      font-size: 16px;
+      background-color: #0071e3;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    button:hover {
+      background-color: #0077ed;
+    }
+    .steps {
+      border-top: 1px solid #e5e5e5;
+      padding-top: 15px;
+    }
+    .step {
+      background: #f9f9fb;
+      border-left: 4px solid #0071e3;
+      padding: 10px 15px;
+      margin-bottom: 10px;
+      border-radius: 0 6px 6px 0;
+    }
+    .error {
+      color: #d93025;
+      background: #fce8e6;
+      border-left-color: #d93025;
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h2>Equation Solver</h2>
+  <p>Enter a linear equation to solve for <strong>x</strong> (e.g., <code>1x+2=2x</code>):</p>
+  
+  <div class="input-group">
+    <input type="text" id="equation" placeholder="e.g. 3x + 5 = 2x - 7" value="1x+2=2x" />
+    <button onclick="solveEquation()">Solve</button>
+  </div>
+
+  <div id="output" class="steps"></div>
+</div>
+
+<script>
+  function solveEquation() {
+    const outputDiv = document.getElementById('output');
+    outputDiv.innerHTML = ''; // Clear previous output
+    let rawInput = document.getElementById('equation').value;
+
+    if (!rawInput.includes('=')) {
+      showError("Please include an '=' sign in your equation.");
+      return;
+    }
+
+    // Split left and right sides
+    let [leftStr, rightStr] = rawInput.split('=');
+
+    addStep("Original Equation", `${leftStr.trim()} = ${rightStr.trim()}`);
+
+    try {
+      // Parse sides into (x-coefficient, constant)
+      let left = parseSide(leftStr);
+      let right = parseSide(rightStr);
+
+      addStep("Simplified Both Sides", `${formatSide(left.coeff, left.const)} = ${formatSide(right.coeff, right.const)}`);
+
+      // Move x terms to the left
+      if (right.coeff !== 0) {
+        left.coeff -= right.coeff;
+        addStep(`Subtract ${right.coeff}x from both sides`, `${formatSide(left.coeff, left.const)} = ${right.const}`);
+        right.coeff = 0;
+      }
+
+      // Move constants to the right
+      if (left.const !== 0) {
+        right.const -= left.const;
+        let op = left.const > 0 ? "Subtract" : "Add";
+        let val = Math.abs(left.const);
+        addStep(`${op} ${val} ${left.const > 0 ? 'from' : 'to'} both sides`, `${formatSide(left.coeff, 0)} = ${right.const}`);
+        left.const = 0;
+      }
+
+      // Solve for x
+      if (left.coeff === 0) {
+        if (right.const === 0) {
+          addStep("Result", "Infinite solutions (0 = 0)");
+        } else {
+          addStep("Result", "No solution (False statement)");
+        }
+        return;
+      }
+
+      if (left.coeff !== 1) {
+        let solution = right.const / left.coeff;
+        addStep(`Divide both sides by ${left.coeff}`, `x = ${solution}`);
+      } else {
+        addStep("Final Result", `x = ${right.const}`);
+      }
+
+    } catch (e) {
+      showError(e.message || "Invalid equation format. Make sure you use standard algebra notation.");
+    }
+  }
+
+  // Parse algebraic side into coefficient of x and constant
+  function parseSide(sideStr) {
+    // Normalize spaces and signs
+    let str = sideStr.replace(/\s+/g, '').replace(/-/g, '+-');
+    let terms = str.split('+').filter(t => t.length > 0);
+
+    let coeff = 0;
+    let constant = 0;
+
+    for (let term of terms) {
+      if (term.includes('x')) {
+        let c = term.replace('x', '');
+        if (c === '' || c === '+') coeff += 1;
+        else if (c === '-') coeff -= 1;
+        else coeff += parseFloat(c);
+      } else {
+        constant += parseFloat(term);
+      }
+    }
+
+    if (isNaN(coeff) || isNaN(constant)) {
+      throw new Error("Could not parse equation terms properly.");
+    }
+
+    return { coeff, const: constant };
+  }
+
+  // Helper function to turn numbers into clean algebraic strings
+  function formatSide(coeff, constant) {
+    let parts = [];
+    if (coeff !== 0) {
+      if (coeff === 1) parts.push("x");
+      else if (coeff === -1) parts.push("-x");
+      else parts.push(`${coeff}x`);
+    }
+    if (constant !== 0 || parts.length === 0) {
+      if (constant > 0 && parts.length > 0) {
+        parts.push(`+ ${constant}`);
+      } else {
+        parts.push(`${constant}`);
+      }
+    }
+    return parts.join(' ');
+  }
+
+  function addStep(title, content) {
+    const outputDiv = document.getElementById('output');
+    const stepEl = document.createElement('div');
+    stepEl.className = 'step';
+    stepEl.innerHTML = `<strong>${title}:</strong><br><code>${content}</code>`;
+    outputDiv.appendChild(stepEl);
+  }
+
+  function showError(msg) {
+    const outputDiv = document.getElementById('output');
+    outputDiv.innerHTML = `<div class="step error"><strong>Error:</strong> ${msg}</div>`;
+  }
+</script>
+
+</body>
+</html>
